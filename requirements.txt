@@ -1,0 +1,10 @@
+python==3.7.0
+pytorch==1.12.1
+numpy
+matplotlib
+tqdm
+pycocotools
+torch==1.7.1
+torchvision==0.8.2
+lxml
+Pillow
