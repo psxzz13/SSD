@@ -9,8 +9,8 @@ from lxml import etree
 class VOCDataSet(Dataset):
     """Read and parse PASCAL VOC2007/2012 datasets"""
 
-    def __init__(self, voc_root, year="2007", transforms=None, train_set='train.txt'):
-        assert year in ["2007", "2012"], "year must be in ['2007', '2012']"
+    def __init__(self, voc_root, year="2012", transforms=None, train_set='train.txt'):
+        assert year in ["2007", "2012", "2022"], "year must be in ['2007', '2012', '2022']"
         if "VOCdevkit" in voc_root:
             self.root = os.path.join(voc_root, f"VOC{year}")
         else:
@@ -24,7 +24,7 @@ class VOCDataSet(Dataset):
             self.xml_list = [os.path.join(self.annotations_root, line.strip() + ".xml")
                              for line in read.readlines() if len(line.strip()) > 0]
 
-        json_file = "./bdd100k_classes.json"
+        json_file = "./pascal_voc_classes.json"
         assert os.path.exists(json_file), "{} file not exist.".format(json_file)
         with open(json_file, 'r') as f:
             self.class_dict = json.load(f)
@@ -103,13 +103,6 @@ class VOCDataSet(Dataset):
         return data_height, data_width
 
     def parse_xml_to_dict(self, xml):
-        """
-        Args：
-            xml: xml tree obtained by parsing XML file contents using lxml.etree
-
-        Returns:
-            Python dictionary holding XML contents.
-        """
 
         if len(xml) == 0:  
             return {xml.tag: xml.text}

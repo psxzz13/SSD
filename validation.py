@@ -13,10 +13,7 @@ from train_utils import get_coco_api_from_dataset, CocoEvaluator
 
 
 def summarize(self, catId=None):
-    """
-    Compute and display summary metrics for evaluation results.
-    Note this functin can *only* be applied on the default parameter setting
-    """
+
 
     def _summarize(ap=1, iouThr=None, areaRng='all', maxDets=100):
         p = self.params
@@ -95,7 +92,7 @@ def main(parser_data):
     }
 
     # read class_indict
-    label_json_path = './bdd100k_classes.json'
+    label_json_path = './pascal_voc_classes.json'
     assert os.path.exists(label_json_path), "json file {} dose not exist.".format(label_json_path)
     with open(label_json_path, 'r') as f:
         class_dict = json.load(f)
@@ -107,14 +104,13 @@ def main(parser_data):
     if os.path.exists(os.path.join(VOC_root, "VOCdevkit")) is False:
         raise FileNotFoundError("VOCdevkit dose not in path:'{}'.".format(VOC_root))
 
-    
     batch_size = parser_data.batch_size
     nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, 8])  # number of workers
     print('Using %g dataloader workers' % nw)
 
     # load validation data set
     # VOCdevkit -> VOC2012 -> ImageSets -> Main -> val.txt
-    val_dataset = VOCDataSet(VOC_root, "2007", transforms=data_transform["val"], train_set="val.txt")
+    val_dataset = VOCDataSet(VOC_root, "2022", transforms=data_transform["val"], train_set="val.txt")
     val_dataset_loader = torch.utils.data.DataLoader(val_dataset,
                                                      batch_size=batch_size,
                                                      shuffle=False,
@@ -129,7 +125,7 @@ def main(parser_data):
     weights_path = parser_data.weights
     assert os.path.exists(weights_path), "not found {} file.".format(weights_path)
     model.load_state_dict(torch.load(weights_path, map_location='cpu')['model'])
-    #print(model)
+    # print(model)
 
     model.to(device)
 
@@ -197,13 +193,13 @@ if __name__ == "__main__":
 
     parser.add_argument('--device', default='cuda', help='device')
 
-    parser.add_argument('--num-classes', type=int, default='8', help='number of classes')
+    parser.add_argument('--num-classes', type=int, default='20', help='number of classes')
 
-    
     parser.add_argument('--data-path', default='./', help='dataset root')
 
-    parser.add_argument('--weights', default='/home/yyj/Downloads/ssd300_attention/ssd300_attention/save_weights/ssd300-0.pth', type=str, help='training weights')
+    parser.add_argument('--weights', default='./save_weights/ssd300-14.pth', type=str, help='training weights')
 
+    # batch size
     parser.add_argument('--batch_size', default=1, type=int, metavar='N',
                         help='batch size when validation.')
 

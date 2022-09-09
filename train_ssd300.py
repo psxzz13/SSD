@@ -1,8 +1,6 @@
-from itertools import count
 import os
 import datetime
 
-import numpy.random
 import torch
 
 import transforms
@@ -11,28 +9,19 @@ from src import SSD300, Backbone
 import train_utils.train_eval_utils as utils
 from train_utils import get_coco_api_from_dataset
 
-numpy.random.seed(1)
 
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-
-def create_model(num_classes=21):
-    # https://download.pytorch.org/models/resnet50-19c8e357.pth
-    # pre_train_path = "./src/resnet50.pth"
+def create_model(num_classes=9):
     backbone = Backbone()
     model = SSD300(backbone=backbone, num_classes=num_classes)
-    print(count_parameters(model))
 
 
-    # https://ngc.nvidia.com/catalog/models -> search ssd -> download FP32
     pre_ssd_path = "./src/nvidia_ssdpyt_fp32.pt"
     if os.path.exists(pre_ssd_path) is False:
         raise FileNotFoundError("nvidia_ssdpyt_fp32.pt not find in {}".format(pre_ssd_path))
     pre_model_dict = torch.load(pre_ssd_path, map_location='cpu')
     pre_weights_dict = pre_model_dict["model"]
 
-    
+    # Remove the category predictor weights, note that the weights of the regression predictor can be reused because num_classes is not involved
     del_conf_loc_dict = {}
     for k, v in pre_weights_dict.items():
         split_key = k.split(".")
@@ -76,7 +65,7 @@ def main(parser_data):
         raise FileNotFoundError("VOCdevkit dose not in path:'{}'.".format(VOC_root))
 
     # VOCdevkit -> VOC2012 -> ImageSets -> Main -> train.txt
-    train_dataset = VOCDataSet(VOC_root, "2007", data_transform['train'], train_set='train.txt')
+    train_dataset = VOCDataSet(VOC_root, "2012", data_transform['train'], train_set='train.txt')
     batch_size = parser_data.batch_size
     assert batch_size > 1, "batch size must be greater than 1"
     drop_last = True if len(train_dataset) % batch_size == 1 else False
@@ -90,7 +79,7 @@ def main(parser_data):
                                                     drop_last=drop_last)
 
     # VOCdevkit -> VOC2012 -> ImageSets -> Main -> val.txt
-    val_dataset = VOCDataSet(VOC_root, "2007", data_transform['val'], train_set='val.txt')
+    val_dataset = VOCDataSet(VOC_root, "2012", data_transform['val'], train_set='val.txt')
     val_data_loader = torch.utils.data.DataLoader(val_dataset,
                                                   batch_size=batch_size,
                                                   shuffle=False,
@@ -109,7 +98,6 @@ def main(parser_data):
                                                    step_size=5,
                                                    gamma=0.3)
 
-    # Follow up the last result with training
     if parser_data.resume != "":
         checkpoint = torch.load(parser_data.resume, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
@@ -122,7 +110,6 @@ def main(parser_data):
     learning_rate = []
     val_map = []
 
-    # Advance loading of validation set data
     val_data = get_coco_api_from_dataset(val_data_loader.dataset)
     for epoch in range(parser_data.start_epoch, parser_data.epochs):
         mean_loss, lr = utils.train_one_epoch(model=model, optimizer=optimizer,
@@ -140,7 +127,6 @@ def main(parser_data):
 
         # write into txt
         with open(results_file, "a") as f:
-            # The data written includes coco metrics as well as loss and learning rate
             result_info = [str(round(i, 4)) for i in coco_info + [mean_loss.item()]] + [str(round(lr, 6))]
             txt = "epoch:{} {}".format(epoch, '  '.join(result_info))
             f.write(txt + "\n")
@@ -176,29 +162,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description=__doc__)
 
-    # Training equipment types
     parser.add_argument('--device', default='cuda:0', help='device')
-    # Number of target categories detected, excluding background
-    parser.add_argument('--num_classes', default=8, type=int, help='num_classes')
-    # Root of the training dataset (VOCdevkit)
+    parser.add_argument('--num_classes', default=20, type=int, help='num_classes')
     parser.add_argument('--data-path', default='./', help='dataset')
-    # File saving address
     parser.add_argument('--output-dir', default='./save_weights', help='path where to save')
-    # continue the last training
     parser.add_argument('--resume', default='', type=str, help='resume from checkpoint')
-    # Specify which epoch number to start training from next
     parser.add_argument('--start_epoch', default=0, type=int, help='start epoch')
-    # Total number of epochs for training
-    parser.add_argument('--epochs', default=5, type=int, metavar='N',
+    parser.add_argument('--epochs', default=20, type=int, metavar='N',
                         help='number of total epochs to run')
-    # Training patch size
     parser.add_argument('--batch_size', default=4, type=int, metavar='N',
                         help='batch size when training.')
 
     args = parser.parse_args()
     print(args)
-
-    # Check if the save weights folder exists, and create it if it does not.
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 

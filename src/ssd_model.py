@@ -1,7 +1,7 @@
 import torch
 from torch import nn, Tensor
 from torch.jit.annotations import List
-from torch.nn import functional as F
+
 from .res50_backbone import resnet50
 from .utils import dboxes300_coco, Encoder, PostProcess
 
@@ -17,9 +17,10 @@ class Backbone(nn.Module):
 
         self.feature_extractor = nn.Sequential(*list(net.children())[:7])
 
-
         conv4_block1 = self.feature_extractor[-1][0]
 
+        # Modify the step of conv4_block1 from 2 -> 1
+        conv4_block1.conv1.stride = (1, 1)
         conv4_block1.conv2.stride = (1, 1)
         conv4_block1.downsample[0].stride = (1, 1)
 
@@ -29,7 +30,7 @@ class Backbone(nn.Module):
 
 
 class SSD300(nn.Module):
-    def __init__(self, backbone=None, num_classes=9):
+    def __init__(self, backbone=None, num_classes=21):
         super(SSD300, self).__init__()
         if backbone is None:
             raise Exception("backbone is None")
@@ -60,6 +61,11 @@ class SSD300(nn.Module):
         self.postprocess = PostProcess(default_box)
 
     def _build_additional_features(self, input_size):
+        """
+        Add an additional series of convolutional layers to backbone(resnet50) to obtain the corresponding series of feature extractors
+        :param input_size:
+        :return:
+        """
         additional_blocks = []
         # input_size = [1024, 512, 512, 256, 256, 256] for resnet50
         middle_channels = [256, 256, 128, 128, 128]
@@ -126,13 +132,19 @@ class SSD300(nn.Module):
             loss = self.compute_loss(locs, confs, bboxes_out, labels_out)
             return {"total_losses": loss}
 
-        # Superimpose the prediction regression parameters on the default box to get the final prediction box, and perform non-maximum suppression to consider the overlapping boxes
+    
         # results = self.encoder.decode_batch(locs, confs)
         results = self.postprocess(locs, confs)
         return results
 
 
 class Loss(nn.Module):
+    """
+        Implements the loss as the sum of the followings:
+        1. Confidence Loss: All labels, with hard negative mining
+        2. Localization Loss: Only on positive labels
+        Suppose input dboxes has the shape 8732x4
+    """
     def __init__(self, dboxes):
         super(Loss, self).__init__()
         # Two factor are from following links
@@ -149,19 +161,34 @@ class Loss(nn.Module):
 
     def _location_vec(self, loc):
         # type: (Tensor) -> Tensor
+        """
+        Generate Location Vectors
+        :return:
+        """
         gxy = self.scale_xy * (loc[:, :2, :] - self.dboxes[:, :2, :]) / self.dboxes[:, 2:, :]  # Nx2x8732
         gwh = self.scale_wh * (loc[:, 2:, :] / self.dboxes[:, 2:, :]).log()  # Nx2x8732
         return torch.cat((gxy, gwh), dim=1).contiguous()
 
     def forward(self, ploc, plabel, gloc, glabel):
         # type: (Tensor, Tensor, Tensor, Tensor) -> Tensor
+        """
+            ploc, plabel: Nx4x8732, Nxlabel_numx8732
+                predicted location and labels
+
+            gloc, glabel: Nx4x8732, Nx8732
+                ground truth location and labels
+        """
+
         mask = torch.gt(glabel, 0)  # (gt: >)
         # mask1 = torch.nonzero(glabel)
+
         pos_num = mask.sum(dim=1)
+
 
         vec_gd = self._location_vec(gloc)
 
         # sum on four coordinates, and mask
+        # Calculate localization loss (positive samples only)
         loc_loss = self.location_loss(ploc, vec_gd).sum(dim=1)  # Tensor: [N, 8732]
         loc_loss = (mask.float() * loc_loss).sum(dim=1)  # Tenosr: [N]
 
@@ -169,18 +196,24 @@ class Loss(nn.Module):
         con = self.confidence_loss(plabel, glabel)
 
         # positive mask will never selected
+        # Get negative samples
         con_neg = con.clone()
         con_neg[mask] = 0.0
+
         _, con_idx = con_neg.sort(dim=1, descending=True)
         _, con_rank = con_idx.sort(dim=1) 
+
+        # number of negative three times positive
         neg_num = torch.clamp(3 * pos_num, max=mask.size(1)).unsqueeze(-1)
         neg_mask = torch.lt(con_rank, neg_num)  # (lt: <) Tensor [N, 8732]
 
         con_loss = (con * (mask.float() + neg_mask.float())).sum(dim=1)  # Tensor [N]
 
+        # avoid no object detected
         total_loss = loc_loss + con_loss
         # eg. [15, 3, 5, 0] -> [1.0, 1.0, 1.0, 0.0]
         num_mask = torch.gt(pos_num, 0).float()  
         pos_num = pos_num.float().clamp(min=1e-6)  
         ret = (total_loss * num_mask / pos_num).mean(dim=0)  
+        return ret
 
