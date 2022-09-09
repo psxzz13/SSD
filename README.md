@@ -30,6 +30,7 @@
 ## pre_trained weights
 
 * download from :https://github.com/psxzz13/SSD
+* pre trained weights download from : https://drive.google.com/drive/folders/15YU9zNuSYd_AfXQSVZGAW68OaNAohUlz?usp=sharing
 * vgg16_reducedfc: for SSD_VGG
 * nvidia_ssdpyt_fp32: for SSD_chaned_detection
 * SSD_changed_detection: Before trainnning, download the weights and copy that to SSD_changed_detection/src path
