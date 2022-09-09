@@ -26,10 +26,11 @@
 * Single GPU training or CPU, directly use the train_ssd300.py training script
 * The `results.txt` saved during the training process is the COCO indicator on the validation set for each epoch, the first 12 values are the COCO indicator, and the last two values are the training average loss and learning rate
 
-## pre_trained weights
- 
-download from :https://github.com/psxzz13/SSD
- 
-vgg16_reducedfc: for SSD_VGG
 
-nvidia_ssdpyt_fp32: for SSD_chaned_detection
+## pre_trained weights
+
+* download from :https://github.com/psxzz13/SSD
+* vgg16_reducedfc: for SSD_VGG
+* nvidia_ssdpyt_fp32: for SSD_chaned_detection
+* SSD_changed_detection: Before trainnning, download the weights and copy that to SSD_changed_detection/src path
+* SSD_VGG: Before trainnning, download the weights and copy that to SSD_VGG_Zixuan zhang/weights path
